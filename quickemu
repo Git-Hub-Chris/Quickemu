@@ -229,7 +229,7 @@ function get_cpu_info() {
         elif [ "Socket" == "${INFO_NAME}" ]; then
             sysctl -n hw.packages
         elif [ "Vendor" == "${INFO_NAME}" ]; then
-            if [ "${ARCH_HOST}" == "arm64" ]; then
+            if [ "${arch_host}" == "arm64" ]; then
                 sysctl -n machdep.cpu.brand_string | cut -d' ' -f1
             else
                 sysctl -n machdep.cpu.vendor | sed 's/ //g'
@@ -343,14 +343,18 @@ function configure_cpu() {
         QEMU_ACCEL="kvm"
     fi
 
-    if [ "${ARCH_VM}" == "aarch64"  ]; then
+    if [ "${arch_vm}" == "aarch64"  ]; then
         # Support to run aarch64 VMs (best guess; untested)
         # https://qemu-project.gitlab.io/qemu/system/arm/virt.html
-        case ${ARCH_HOST} in
+        case ${arch_host} in
             arm64|aarch64) CPU_MODEL="max"
-                           MACHINE_TYPE="virt,highmem=off";;
+                           MACHINE_TYPE="virt"
+                           # https://github.com/lima-vm/lima/pull/703
+                           if [ "${QEMU_VER_SHORT}" -le 70 ]; then
+                               MACHINE_TYPE+=",highmem=off"
+                           fi;;
         esac
-    elif [ "${ARCH_VM}" != "${ARCH_HOST}" ]; then
+    elif [ "${arch_vm}" != "${arch_host}" ]; then
         # If the architecture of the VM is different from the host, disable acceleration
         CPU_MODEL="qemu64"
         CPU_KVM_UNHALT=""
@@ -391,6 +395,11 @@ function configure_cpu() {
         if [ "${OS_KERNEL}" == "Linux" ]; then
             SMM="on"
         fi
+    fi
+
+    # smm and vmport are not available on qemu-system-aarch64
+    if [ "${ARCH_QEMU}" == "x86_64" ]; then
+        MACHINE_TYPE+=",smm=${SMM},vmport=off"
     fi
 
     case ${guest_os} in
@@ -891,7 +900,11 @@ function configure_display() {
         linux)
             case ${display} in
                 none|spice|spice-app) DISPLAY_DEVICE="virtio-gpu";;
-                *) DISPLAY_DEVICE="virtio-vga";;
+                *) if [ "${arch_vm}" == "aarch64" ]; then
+                       DISPLAY_DEVICE="virtio-gpu"
+                   else
+                       DISPLAY_DEVICE="virtio-vga"
+                   fi;;
             esac;;
         macos)
             # qxl-vga and VGA supports seamless mouse and sane resolutions if only
@@ -1152,7 +1165,7 @@ function vm_boot() {
         OS_RELEASE=$(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)
     fi
 
-    echo "Quickemu ${VERSION} using ${QEMU} v${QEMU_VER_LONG}"
+    echo "Quickemu ${VERSION} using $(basename "${QEMU}") v${QEMU_VER_LONG}"
     echo " - Host:     ${OS_RELEASE} running ${KERNEL_NAME} ${KERNEL_VER} ${KERNEL_NODE}"
 
     # Force to lowercase.
@@ -1182,10 +1195,10 @@ function vm_boot() {
         args+=(-name ${VMNAME},process=${VMNAME})
     fi
     # shellcheck disable=SC2054,SC2206,SC2140
-    args+=(-machine ${MACHINE_TYPE},smm=${SMM},vmport=off,accel=${QEMU_ACCEL} ${GUEST_TWEAKS}
+    args+=(-machine ${MACHINE_TYPE},accel=${QEMU_ACCEL} ${GUEST_TWEAKS}
         ${CPU} ${SMP}
         -m ${RAM_VM} ${BALLOON}
-        -rtc base=localtime,clock=host,driftfix=slew
+        -rtc base=localtime,clock=host,driftfix=${driftfix}
         -pidfile "${VMDIR}/${VMNAME}.pid")
 
     # shellcheck disable=SC2206
@@ -1819,12 +1832,15 @@ function monitor_send_cmd {
 ### MAIN
 
 # Lowercase variables are used in the VM config file only
+arch_host=$(uname -m)
+arch_vm="${arch_vm:-x86_64}"
 boot="efi"
 cpu_cores=""
 disk_format="${disk_format:-qcow2}"
 disk_img="${disk_img:-}"
 disk_size="${disk_size:-16G}"
 display="${display:-sdl}"
+driftfix="${driftfix:-slew}"
 extra_args="${extra_args:-}"
 fixed_iso=""
 floppy=""
@@ -1883,16 +1899,6 @@ readonly LAUNCHER=$(basename "${0}")
 readonly DISK_MIN_SIZE=$((197632 * 8))
 readonly VERSION="4.9.6"
 
-# TODO: Make this run the native architecture binary
-ARCH_VM="x86_64"
-ARCH_HOST=$(uname -m)
-QEMU=$(command -v qemu-system-${ARCH_VM})
-QEMU_IMG=$(command -v qemu-img)
-if [ ! -x "${QEMU}" ] || [ ! -x "${QEMU_IMG}" ]; then
-    echo "ERROR! QEMU not found. Please make sure 'qemu-system-${ARCH_VM}' and 'qemu-img' are installed."
-    exit 1
-fi
-
 # Check for gnu tools on macOS
 STAT="stat"
 if command -v gstat &>/dev/null; then
@@ -1902,13 +1908,6 @@ fi
 OS_KERNEL=$(uname -s)
 if [ "${OS_KERNEL}" == "Darwin" ]; then
     display="cocoa"
-fi
-
-QEMU_VER_LONG=$(${QEMU_IMG} --version | head -n 1 | awk '{print $3}')
-QEMU_VER_SHORT=$(echo "${QEMU_VER_LONG//./}" | cut -c1-2)
-if [ "${QEMU_VER_SHORT}" -lt 60 ]; then
-    echo "ERROR! QEMU 6.0.0 or newer is required, detected ${QEMU_VER_LONG}."
-    exit 1
 fi
 
 # Take command line arguments
@@ -2055,6 +2054,26 @@ if [ -n "${VM}" ] && [ -e "${VM}" ]; then
     # if disk_img is not configured, do the right thing.
     if [ -z "${disk_img}" ]; then
         disk_img="${VMDIR}/disk.${disk_format}"
+    fi
+
+    # slew for clock drift_fix is not available on aaarch64
+    if [ "${arch_vm}" != "x86_64" ]; then
+        driftfix="none"
+    fi
+
+    QEMU_IMG=$(command -v qemu-img)
+    QEMU=$(command -v "qemu-system-${arch_vm}")
+
+    if [ ! -x "${QEMU}" ] || [ ! -x "${QEMU_IMG}" ]; then
+        echo "ERROR! QEMU not found. Please make sure 'qemu-system-${arch_vm}' and 'qemu-img' are installed."
+        exit 1
+    fi
+
+    QEMU_VER_LONG=$(${QEMU_IMG} --version | head -n 1 | awk '{print $3}')
+    QEMU_VER_SHORT=$(echo "${QEMU_VER_LONG//./}" | cut -c1-2)
+    if [ "${QEMU_VER_SHORT}" -lt 60 ]; then
+        echo "ERROR! QEMU 6.0.0 or newer is required, detected ${QEMU_VER_LONG}."
+        exit 1
     fi
 
     # Iterate over any actions and exit.
