@@ -1,0 +1,65 @@
+name: "Test supported 🧪"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - quickget
+  pull_request:
+    branches:
+      - master
+    paths:
+      - quickget
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-matrix:
+    name: "Generate Matrix for Changed Files"
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4
+
+      - name: "Generate Matrix"
+        id: set-matrix
+        run: |
+          SUPPORTED=$(./quickget | awk 'NR==2,/zorin/' | cut -d':' -f2 | tail -n +2 | paste -sd' ')
+          MATRIX="{\"include\": ["
+          for os in $SUPPORTED; do
+            MATRIX+="{\"os\": \"$os\"},"
+          done
+          MATRIX="${MATRIX%,}]}"
+          echo "Generated Matrix: $MATRIX"
+          echo "::set-output name=matrix::$MATRIX"
+
+  run-actions:
+    name: "Check 💿️"
+    needs: generate-matrix
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+    steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4
+
+      - name: "Install dependencies 📦️"
+        run: |
+          apt-get -y update
+          apt-get -y install curl qemu-utils jq
+
+      - name: "Run Check for ${{ matrix.os }}"
+        run: |
+          mkdir -p results
+          ./quickget --check ${{ matrix.os }} | tee results/${{ matrix.os }}.txt
+          if grep -vqE '^(PASS:|SKIP:)' results/${{ matrix.os }}.txt; then
+            grep -vE '^(PASS:|SKIP:)' results/${{ matrix.os }}.txt >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
