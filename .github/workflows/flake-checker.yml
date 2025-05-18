@@ -8,6 +8,9 @@ on:
     - cron: '42 0 * * 6'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   flake-checker:
     name: Flake Checker
