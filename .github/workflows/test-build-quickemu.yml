@@ -27,6 +27,8 @@ on:
 jobs:
   test-deb-build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
     steps:
     - name: "Checkout 🥡"
       uses: actions/checkout@v4
@@ -53,9 +55,9 @@ jobs:
       - name: "Checkout 🥡"
         uses: "actions/checkout@v4"
       - name: "Install Nix ❄️"
-        uses: "DeterminateSystems/nix-installer-action@v16"
+        uses: "DeterminateSystems/nix-installer-action@v18"
       - name: "Enable Magic Nix Cache 🪄"
-        uses: "DeterminateSystems/magic-nix-cache-action@v8"
+        uses: "DeterminateSystems/magic-nix-cache-action@v12"
       - name: "Build & Test .nix ❄️"
         run: |
           nix build .#quickemu
