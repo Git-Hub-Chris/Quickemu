@@ -1,6 +1,6 @@
 ---
 author: Martin Wimpress
-date: May 14, 2024
+date: December 30, 2024
 footer: quickemu
 header: Quickemu User Manual
 section: 1
@@ -172,9 +172,10 @@ Haiku, KolibriOS, OpenIndiana, ReactOS, and more.
 
 # Features
 
+- Host support for **Linux and macOS**
 - **macOS** Sonoma, Ventura, Monterey, Big Sur, Catalina & Mojave
 - **Windows** 10 and 11 including TPM 2.0
-- **Windows Server** 2022 2019 2016 2012-r2
+- **Windows Server** 2022 2019 2016
 - [Ubuntu](https://ubuntu.com/desktop) and all the **[official Ubuntu
   flavours](https://ubuntu.com/download/flavours)**
 - **Nearly 1000 operating system editions are supported!**
@@ -193,6 +194,21 @@ Haiku, KolibriOS, OpenIndiana, ReactOS, and more.
 - Full duplex audio
 - Braille support
 - EFI (with or without SecureBoot) and Legacy BIOS boot
+
+## As featured on [Linux Matters](https://linuxmatters.sh) podcast!
+
+The presenters of Linux Matters 🐧🎙️ are the creators of each of the
+principle Quickemu projects. We discussed Quickemu's 2024 reboot in
+[Episode 30 - Quickemu Rising From the
+Bashes](https://linuxmatters.sh/30).
+<!-- and in [Episode 32 - Quick, quicker, quickest](https://linuxmatters.sh/32) [Martin](https://github.com/flexiondotorg) unveils macOS host support for [**Quickemu**](https://github.com/quickemu-project/quickemu), [Mark](https://github.com/marxjohnson) explains the origins of the [**Quickgui**](https://github.com/quickemu-project/quickgui) desktop app and upcoming improvements, and [Alan](https://github.com/popey) debuts [**Quicktest**](https://github.com/quickemu-project/quicktest); a framework for automatically testing operating systems via Quickemu -->
+
+<div align="center">
+
+<a href="https://linuxmatters.sh" target="_blank"><img src="https://github.com/wimpysworld/nix-config/raw/main/.github/screenshots/linuxmatters.png" alt="Linux Matters Podcast"/></a>
+<br /> <em>Linux Matters Podcast</em>
+
+</div>
 
 When installing from source, you will need to install the following
 requirements manually:
@@ -213,7 +229,8 @@ requirements manually:
 - [python3](https://www.python.org/)
 - [mkisofs](http://cdrtools.sourceforge.net/private/cdrecord.html)
 - [usbutils](https://github.com/gregkh/usbutils)
-- [util-linux](https://github.com/karelzak/util-linux)
+- [util-linux](https://github.com/karelzak/util-linux); including
+  `uuidgen`
 - [sed](https://www.gnu.org/software/sed/)
 - [socat](http://www.dest-unreach.org/socat/)
 - [spicy](https://gitlab.freedesktop.org/spice/spice-gtk)
@@ -238,13 +255,13 @@ These examples may save a little typing:
 This also applies to derivatives:
 
 ``` shell
-sudo apt install qemu bash coreutils ovmf grep jq mesa-utils pciutils procps python3 genisoimage usbutils util-linux sed socat spice-client-gtk libtss2-tcti-swtpm0 xdg-user-dirs zsync unzip
+sudo apt-get install bash coreutils curl genisoimage grep jq mesa-utils ovmf pciutils procps python3 qemu sed socat spice-client-gtk swtpm-tools unzip usbutils util-linux xdg-user-dirs xrandr zsync 
 ```
 
 #### Install requirements on Fedora hosts
 
 ``` shell
-sudo dnf install qemu bash coreutils edk2-tools grep jq mesa-demos pciutils procps python3 genisoimage usbutils util-linux sed socat spice-gtk-tools swtpm xdg-user-dirs xrandr unzip
+sudo dnf install bash coreutils curl edk2-tools genisoimage grep jq mesa-demos pciutils procps python3 qemu sed socat spice-gtk-tools swtpm unzip usbutils util-linux uuidgen-runtime xdg-user-dirs xrandr zsync
 ```
 
 ### Install requirements on Gentoo
@@ -280,12 +297,17 @@ sudo emerge --ask --noreplace app-emulation/qemu \
 
 #### Install requirements on macOS hosts
 
-This is a **work in progress** (see [issue
-447](https://github.com/quickemu-project/quickemu/issues/447) for other
-steps and changes that may enable running on MacOS)
+Install the Quickemu requirements using brew:
 
 ``` shell
-brew install qemu bash coreutils curl grep jq pciutils python@3.10 cdrtools gnu-sed spice-gtk zsync
+brew install bash cdrtools coreutils jq python3 qemu usbutils samba socat swtpm zsync
+```
+
+Now clone the project:
+
+``` shell
+git clone https://github.com/quickemu-project/quickemu
+cd quickemu
 ```
 
 ## [Alternative Frontends](https://github.com/quickemu-project/quickemu/wiki/07-Alternative-frontends)
@@ -310,24 +332,6 @@ sudo apt install quickgui
 Many thanks to [Luke Wesley-Holley](https://github.com/Lukewh) and
 [Philipp Kiemle](https://github.com/daPhipz) for creating the
 **[Quickemu icons](https://github.com/Lukewh/quickemu-icons)** 🎨
-
-### qqX
-
-There is also a multi option desktop integrated text interface, the
-**quickemu quickget X terminal project**, or **qqX**, with lots of
-unique tools and utilities to help you make light work of installations,
-snapshots and disk management
-
-- **[qqX](https://github.com/TuxVinyards/qqX)** is independently curated
-  by [Alex Genovese](https://github.com/TuxVinyards) (see the github
-  pages)
-
-<figure>
-<img
-src="https://github.com/TuxVinyards/qqX/assets/3956806/18e5c495-8072-49a5-8b9c-e1302549efcf"
-alt="qqX-vmm" />
-<figcaption aria-hidden="true">qqX-vmm</figcaption>
-</figure>
 
 ## Creating Linux guests 🐧
 
@@ -390,11 +394,12 @@ You can also use `quickget` with advanced options :
 
 ``` text
   --download      <os> <release> [edition] : Download image; no VM configuration
-  --create-config <os> [path/url]          : Create VM config for a OS image
+  --create-config <os> [path/url] [flags]  : Create VM config for an OS image
   --open-homepage <os>                     : Open homepage for the OS
   --show          [os]                     : Show OS information
   --version                                : Show version
   --help                                   : Show this help message
+  --disable-unattended                     : Force quickget not to set up an unattended installation
   --url           [os] [release] [edition] : Show image URL(s)
   --check         [os] [release] [edition] : Check image URL(s)
   --list                                   : List all supported systems
@@ -468,6 +473,7 @@ Further information is available from the project
 - `linuxlite` (Linux Lite)
 - `linuxmint` (Linux Mint)
 - `lmde` (Linux Mint Debian Edition)
+- `maboxlinux` (Mabox Linux)
 - `mageia` (Mageia)
 - `manjaro` (Manjaro)
 - `mxlinux` (MX Linux)
@@ -485,6 +491,7 @@ Further information is available from the project
 - `popos` (Pop!\_OS)
 - `porteus` (Porteus)
 - `primtux` (PrimTux)
+- `proxmox-ve` (Proxmox VE)
 - `pureos` (PureOS)
 - `reactos` (ReactOS)
 - `rebornos` (RebornOS)
@@ -750,7 +757,7 @@ Arguments
   --braille                         : Enable braille support. Requires SDL.
   --delete-disk                     : Delete the disk image and EFI variables
   --delete-vm                       : Delete the entire VM and its configuration
-  --display                         : Select display backend. 'sdl' (default), 'gtk', 'none', 'spice' or 'spice-app'
+  --display                         : Select display backend. 'sdl' (default), 'cocoa', 'gtk', 'none', 'spice' or 'spice-app'
   --fullscreen                      : Starts VM in full screen mode (Ctl+Alt+f to exit)
   --ignore-msrs-always              : Configure KVM to always ignore unhandled machine-specific registers
   --kill                            : Kill the VM process if it is running
@@ -844,4 +851,4 @@ Submit bug reports online at:
 
 Full sources at: <https://github.com/quickemu-project/quickemu>
 
-quickemu_conf(1), quickget(1), quickgui(1)
+quickemu_conf(5), quickget(1), quickgui(1)

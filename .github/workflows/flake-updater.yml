@@ -1,0 +1,21 @@
+name: Flake ❄️ Lock 🔒️ Updater ✨
+
+on:
+  schedule:
+    - cron: '37 13 14,28 * *'
+  workflow_dispatch:
+
+jobs:
+  lock-updater:
+    name: Flake Lock Updater
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+        with:
+          pr-title: "chore: update flake.lock"
