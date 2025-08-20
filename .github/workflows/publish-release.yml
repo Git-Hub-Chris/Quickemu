@@ -48,6 +48,8 @@ jobs:
     needs: [draft-release]
     name: "Build Release 👨‍🔧"
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@v5
     - name: Build and Upload .deb
